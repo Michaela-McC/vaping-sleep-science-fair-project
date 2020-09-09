@@ -10,44 +10,53 @@ source("R/expit.R")
 set.seed(123)
 
 data(Sim)
-Sim$Attitude <- factor(Sim$Attitude,c("Nerd","Wild"))
+cAttitude <- c("Nerd", "Wild")
+Sim$Attitude <- factor(Sim$Attitude, cAttitude)
 nObs <- nrow(Sim)
 
-# Check the 
-table(Sim[,c("Attitude","Vape")])
-boxplot(Mem ~ Vape, data=Sim)
-boxplot(Mem ~ Attitude, data=Sim)
-boxplot(Rec ~ Vape, data=Sim)
-boxplot(Rec ~ Attitude, data=Sim)
+# Check the
+table(Sim[, c("Attitude", "Vape")])
+boxplot(Mem ~ Vape, data = Sim)
+boxplot(Mem ~ Attitude, data = Sim)
+boxplot(Rec ~ Vape, data = Sim)
+boxplot(Rec ~ Attitude, data = Sim)
 
 # What about randomized response for [Vape|Attitude]
 # See Link and Barker p. 165--182
 BUGSMdl <- function() {
   # Noninformed constants
-  NITau <- 0.001
-  NIVar <- 0.01
+  NIBeta <- 1000
   
   # Likelihoods
   for (iObs in 1:nObs) {
     Vape[iObs] ~ dbern(pVape[Attitude[iObs]])
     VapeResp[iObs] ~ dbern(Vape[iObs] + pResp * (1 - Vape[iObs]))
-    lgtMem[iObs] ~ dnorm(lMemReg[Vape[iObs] + 1], lMemTau)
-    lgtReact[iObs] ~ dnorm(lReactReg[Vape[iObs] + 1], lReactTau)
+    Mem[iObs] ~ dbeta(MemNu[Vape[iObs] + 1], MemNup[Vape[iObs] + 1])
+    React[iObs] ~ dbeta(ReactNu[Vape[iObs] + 1], ReactNup[Vape[iObs] + 1])
   }
   
   # Priors
   for (iAttitude in 1:2) {
     pVape[iAttitude] ~ dbeta(1, 1)
-    lMemReg[iAttitude] ~ dnorm(0, NITau)
-    lReactReg[iAttitude] ~ dnorm(0, NITau)
+    MemNu[iAttitude] ~ dunif(0, NIBeta)
+    MemNup[iAttitude] ~ dunif(0, NIBeta)
+    ReactNu[iAttitude] ~ dunif(0, NIBeta)
+    ReactNup[iAttitude] ~ dunif(0, NIBeta)
   }
   
-  # lMemTau[iAttitude] ~ dgamma(NIVar, NIVar)
-  # lReactTau[iAttitude] ~ dgamma(NIVar, NIVar)
-  lMemTau ~ dgamma(NIVar, NIVar)
-  lReactTau ~ dgamma(NIVar, NIVar)
-  
-  # Convert the memory and reaction scores back to percentages in R
+  # Convert the memory and reaction scores back to percentages 
+  # https://en.wikipedia.org/wiki/Beta_distribution
+  for (iParm in 1:2) {
+    PctMem[iParm] <- 100 * MemNu[iParm] / (MemNu[iParm] + MemNup[iParm])
+    PctMemSD[iParm] <- 100 * sqrt(MemNu[iParm] * MemNup[iParm] /
+                                    (MemNu[iParm] + MemNup[iParm]) ^ 2 /
+                                    (MemNu[iParm] + MemNup[iParm] + 1))
+    PctReact[iParm] <-
+      100 * ReactNu[iParm] / (ReactNu[iParm] + ReactNup[iParm])
+    PctReactSD[iParm] <- 100 * sqrt(ReactNu[iParm] * ReactNup[iParm] /
+                                      (ReactNu[iParm] + ReactNup[iParm]) ^ 2 /
+                                      (ReactNu[iParm] + ReactNup[iParm] + 1))
+  }
 }
 
 # Proportion of time they do not answer the sensitive question
@@ -55,12 +64,8 @@ BUGSMdl <- function() {
 pRndRsp <- 0.25
 
 iSim <- Sim %>%
-  mutate(
-    CoinFlip = as.logical(rbinom(nObs, 1, pRndRsp)),
-    VapeResp = CoinFlip | Vape,
-    lgtMem = logit(Mem),
-    lgtReact = logit(Rec)
-  )
+  mutate(CoinFlip = as.logical(rbinom(nObs, 1, pRndRsp)),
+         VapeResp = CoinFlip | Vape)
 
 Data <- list(
   nObs = nObs,
@@ -68,12 +73,12 @@ Data <- list(
   Attitude = as.integer(iSim$Attitude),
   Vape = ifelse(iSim$VapeResp, NA, 0),
   VapeResp = iSim$VapeResp,
-  lgtMem = iSim$lgtMem,
-  lgtReact = iSim$lgtReact
+  Mem = iSim$Mem,
+  React = iSim$Rec
 )
 
-Parm <- c("pVape","lMemReg","lMemTau","lReactReg","lReactTau")
-cParm <- paste("pV", c("Nerd", "Wild"), sep = ".")
+Parm <- c("pVape", "PctMem", "PctMemSD", "PctReact", "PctReactSD")
+cParm <- paste("pV", cAttitude, sep = ".")
 
 # inits <- function() {
 #  list(N = c(apply(C, 1, sum), rep(10, Sites - n)))
@@ -94,4 +99,3 @@ MCMC <- jags(
 traplot(MCMC)
 denplot(MCMC)  #, parms=c("")
 print(MCMC)
-
