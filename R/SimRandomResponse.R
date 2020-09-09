@@ -76,7 +76,7 @@ Mdl.VA <- glm(Vape ~ -1 + Attitude,
 summary(Mdl.VA)
 
 # Given attitude, gender is irrelevant
-Mdl.VAG <- glm(Vape ~ Attitude * Gender,
+Mdl.VAG <- glm(Vape ~ -1 + Attitude * Gender,
                data = Sim,
                family = binomial(link = "logit"))
 summary(Mdl.VAG)
@@ -236,5 +236,9 @@ ggplot(data = Sim) +
  traceplot(MCMC)
  plot(MCMC)
  print(MCMC)
+ 
+ save(MCMC,Data,Sim,file="Data/pRespVSSD.RData")
+ save(Sim,file="Data/Sim.RData")
+ 
  
  
