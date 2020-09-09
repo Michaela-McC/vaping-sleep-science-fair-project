@@ -8,7 +8,7 @@ library(ggmosaic)
 library(R2jags)
 
 cGender <- c("M", "F")
-cAttitude <- c("Wild", "Nerd")
+cAttitude <- c("Nerd", "Wild")
 
 Data <-
   readxl::read_xlsx("ExtData/Cognitive Test Data w_ Dates.xlsx",
